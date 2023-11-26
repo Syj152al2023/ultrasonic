@@ -1,0 +1,101 @@
+#define F_CPU 8000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+uint8_t segm[12] = {0b00111111, 0b0000110, 0b01011011, 0b01001111, 0b01100110, 0b01101101,
+0b01111101, 0b00000111, 0b01111111, 0b01101111, 0, 0b00000010 } ;
+uint8_t razr[5] = {0, 2, 6, 8, 4};
+float distence = 0;
+void start() {
+  PORTB |= (1 << 0);
+  PORTB |= (1 << 4);
+}
+void stop() {
+  PORTB &= ~(1 << 4);
+  PORTB &= ~(1 << 0);
+}
+void wr_i2c(uint8_t val) {
+  uint8_t x = 0;
+  while (x < 8) {
+    val & (1 << (7 - x)) ? PORTB &= ~(1 << 0) : PORTB |= (1 << 0);
+    PORTB &= ~(1 << 4);
+    PORTB |= (1 << 4);
+    x++;
+  }
+  PORTB &= ~(1 << 0);
+  PORTB &= ~(1 << 4);
+  PORTB |= (1 << 4);
+  PORTB |= (1 << 0);
+}
+void brigness(uint8_t b) {
+  if (b > 15) {b = 15;}
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c(0xE0 + b);
+  stop();
+}
+void _blink(uint8_t val) {
+  if (val > 0b11) {val = 0b11;}
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c((val << 1) | 0b10000001);
+  stop();
+}
+void reset(uint8_t val = 1) {
+  if (val > 1) {val = 1;}
+  wr_i2c(0b11100000);
+  wr_i2c(val | 0b10000000);
+  stop();
+}
+void _print(uint8_t addr, uint8_t val) {
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c(razr[addr]);
+  wr_i2c(segm[val]);
+  stop();
+}
+long readUltrasonicDistance(int triggerPin, int echoPin) {
+  pinMode(triggerPin, OUTPUT);  // Clear the trigger
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  // Sets the trigger pin to HIGH state for 10 microseconds
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+  pinMode(echoPin, INPUT);
+  // Reads the echo pin, and returns the sound wave travel time in microseconds
+  return pulseIn(echoPin, HIGH);
+}
+void setup() {
+  distence = 0;
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c(0b00100001);
+  stop();
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c(0b10000001);
+  stop();
+  start();
+  wr_i2c(0b11100000);
+  wr_i2c(0xe0 + 15);
+  stop();
+}
+void loop() {
+  long dist = readUltrasonicDistance(3,5);
+  delay(100);
+  distence = 0.01723 * dist;
+  float decimal = distence - (int)distence;
+  int rounded;
+  if(decimal >= 0.5) { rounded = (int)distence + 1; }
+  else { rounded = (int)distence; }
+  int thousands = rounded/1000;
+  int hundreds = (rounded/100)%10; 
+  int tens = (rounded/10)%10;
+  int units = rounded%10;
+  _print(0, thousands);
+  _print(1, hundreds);
+  _print(2, tens);  
+  _print(3, units);
+}
+
